@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: node-exporter
+    env: development
+  name: node-exporter
+spec:
+  # Update strategy
+  updateStrategy:
+    # Legacy bahaviour!
+    # OnDelete strategt will update the pod with the new definition only when old pod is manually deleted.
+    # type: OnDelete
+
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+
+  # Pod selector
+  selector:
+    matchLabels:
+      app: node-exporter
+      env: development
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+        env: development
+      name: node-exporter
+    spec:
+      # Node selector.
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+      - name: node-exporter
+        image: prom/node-exporter:v1.1.2
+        args:
+        - --web.listen-address=127.0.0.1:9100
+        - --path.sysfs=/host/sys
+        - --path.rootfs=/host/root
+        - --no-collector.wifi
+        - --no-collector.hwmon
+        - --collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/pods/.+)($|/)
+        - --collector.netclass.ignored-devices=^(veth.*)$
+        - --collector.netdev.device-exclude=^(veth.*)$
+        ports:
+          - containerPort: 9100
+            protocol: TCP
+        resources:
+          limits:
+            cpu: 250m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /host/sys
+          mountPropagation: HostToContainer
+          name: sys
+          readOnly: true
+        - mountPath: /host/root
+          mountPropagation: HostToContainer
+          name: root
+          readOnly: true
+      volumes:
+      - hostPath:
+          path: /sys
+        name: sys
+      - hostPath:
+          path: /
+        name: root
