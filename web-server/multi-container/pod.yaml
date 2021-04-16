@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webserver-multicontainer
+  labels:
+    env: development
+    app: server
+spec:
+  containers:
+  
+  - image: k8s/pods-static:latest
+
+    # Just spin, copy index.html to shared volume and wait for ever.
+    command: [ "/bin/bash", "-c", "--" ]
+    args: [ "cp /server/index.html /shared/index.html && while true; do sleep 30; done;" ]
+
+    # Force pull image from local machine imagePullPolicy: "IfNotPresent"
+    imagePullPolicy: Never
+
+    name: staticfile
+    volumeMounts:
+    - mountPath: /shared
+      name: shared-volume
+    resources:
+      requests:
+        cpu: "0.05"
+        memory: "64Mi"
+      limits:
+          cpu: "0.05"
+          memory: "64Mi"
+  
+  - image: k8s/pods-server:latest
+    imagePullPolicy: Never
+    name: server
+    ports:
+    - containerPort: 9000
+    volumeMounts:
+    - mountPath: /server
+      name: shared-volume
+    resources:
+      requests:
+        cpu: "0.1"
+        memory: "256Mi"
+      limits:
+          cpu: "0.2"
+          memory: "512Mi"
+    livenessProbe:
+      tcpSocket:
+        port: 9000
+      initialDelaySeconds: 30
+      periodSeconds: 20
+      failureThreshold: 3
+
+  volumes:
+  - name: shared-volume
+    emptyDir: {}
+  
+  restartPolicy: OnFailure
