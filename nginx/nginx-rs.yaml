@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-replicaset
+  labels:
+    app: nginx
+    env: development
+spec:
+  # Number of replicas
+  replicas: 2
+  # Pod selector
+  selector:
+    matchLabels:
+      app: nginx
+  # Pod template
+  template:
+    metadata:
+      name: nginx-pod
+      labels:
+        app: nginx
+        env: development
+    spec:
+      containers:
+      - image: nginx:1.19.9
+        imagePullPolicy: "IfNotPresent"
+        name: nginx-container
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "0.1"
+            memory: "128Mi"
+          limits:
+            cpu: "0.1"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          failureThreshold: 3
