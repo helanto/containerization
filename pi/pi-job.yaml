@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi-job
+  labels:
+    env: development
+    app: pi-estimation
+spec:
+  parallelism: 2
+  completions: 5
+
+  # Completion mode available in Kubernetes v1.21
+  # Set completionMode to Indexed in case you want all pods to behave in the same way
+  # completionMode: NonIndexed 
+
+  # Number of consecutive retries before considering a job as failed.
+  # The back-off count is reset when a pod is deleted or successful without any other pod for the
+  # job failing around that time.
+  # Failed pods are recreated with an exponential back-off delay (10s, 20s, 40s ...) capped at six minutes.
+  backoffLimit: 10
+
+  # Set a deadline for the job to complete. If the job is not completed before the deadline, it will be killed.
+  activeDeadlineSeconds: 300
+
+  template:
+    metadata:
+      name: pi-pod
+      labels:
+        app: pi-estimation
+        env: development
+    spec:
+      containers:
+      - name: pi-container
+        image: python:3.9.4-slim
+        command: ["/bin/sh", "-c"]
+        args: ["pip install mpmath && python -c 'from mpmath import mp; mp.dps = 100; print(mp.pi)'"]
+        resources:
+          requests:
+            cpu: "0.05"
+            memory: "64Mi"
+          limits:
+            cpu: "0.05"
+            memory: "64Mi"
+      restartPolicy: OnFailure
