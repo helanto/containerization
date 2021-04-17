@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webserver-configuration
+data:
+  port: "9100"
+  index.html: |
+    <html>
+
+    <head>
+    </head>
+
+    <body>
+      <h1>Hello World</h1>
+      <p>The file was injected from a config map</p>
+    </body>
+
+    </html>

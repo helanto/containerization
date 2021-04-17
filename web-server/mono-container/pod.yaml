@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webserver-singlecontainer
+  labels:
+    env: development
+    app: server
+spec:
+  containers:
+  - image: k8s/pods-server:latest
+    imagePullPolicy: Never
+    name: server
+    # Overrides CMD in image definition.
+    args: ["$(WEBSERVER_PORT)"]
+    env:
+    - name: WEBSERVER_PORT # Name of env variable.
+      valueFrom:
+        configMapKeyRef:
+          # The ConfigMap this value comes from.
+          name: webserver-configuration
+          # The key to fetch.
+          key: port
+    resources:
+      requests:
+        cpu: "0.1"
+        memory: "256Mi"
+      limits:
+          cpu: "0.2"
+          memory: "512Mi"
+    volumeMounts:
+    - mountPath: /server
+      name: config-volume
+
+  # Set volumes at the pod level, then mount them into containers inside that pod.
+  volumes:
+  - name: config-volume
+    configMap:
+      # The name of the ConfigMap the value comes from.
+      name: webserver-configuration
+      # An array of keys from the ConfigMap to create as files.
+      items:
+      - key: index.html
+        path: index.html
+  
+  restartPolicy: OnFailure
