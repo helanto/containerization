@@ -874,9 +874,6 @@ pods forwarding traffic to any of them in a *random* or *round-robin* fashion. T
 significant improvement compared to a world without services, in which clients have to memorize IP
 addresses of ephemeral pods instead of a single, constant IP address.
 
-You might notice that curling a service works, but pinging it does not. That’s because the service’s
-cluster IP is a virtual IP and only has meaning when combined with the service port.
-
 #### NodePort
 The problem with `ClusterIP` services is that they can only be consumed by pods from within the
 cluster. By creating a `NodePort` service, each cluster node opens a port on the node itself (hence
@@ -908,8 +905,8 @@ Why do we yet need another service type ? One important reason is that each `Loa
 requires its own load balancer with its own public IP address, whereas an `Ingress` only requires
 one, even when providing access to dozens of services. 
 
-Ingresses operate at the application layer of the network stack (HTTP) and vide features such as
-cookie-based session affinity and the like, which services cannot. When a client sends an HTTP
+Ingresses operate at the application layer of the network stack (HTTP) and provide features such
+as cookie-based session affinity and the like, which services cannot. When a client sends an HTTP
 request to the LoadBalancer Ingress, the host and path in the request determine which service the
 request is forwarded to. This is achieved through the [Host](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Host)
 HTTP header. This way we might have two different domain names pointing to same external IP address
@@ -971,3 +968,44 @@ but through the *DNS round-robin mechanism* instead of through the service proxy
 
 The concept of service port being different from targetPort does not apply to headless services. The
 port translation is happening as part of the layer-4 load-balancing, but headless really means **no load-balancer**.
+
+## Kubernetes internals
+
+### Service proxy
+Every worker node runs the *kube-proxy*, whose purpose is to make sure clients can connect to the
+services you define through the Kubernetes API. The kube-proxy makes sure connections to the service
+IP address and port end up at one of the pods backing that service. When a service is backed by more
+than one pod, the proxy performs load balancing across those pods.
+
+Initially, the kube-proxy was an actual proxy waiting for connections and for each incoming
+connection, opening a new connection to one of the pods. The newer implementations of kube-proxy do
+not rely on an actual server process to accept connections and proxy them to pods. Instead, it uses
+*iptables rules* to redirect packets to a randomly selected backend pod without passing them through
+an actual proxy server. This has an important implication: the iptables proxy mode does not load
+balance in a true round-robin fashion. When only a few clients use a service, they may not be
+spread evenly across pods. For example, if a service has two backing pods but only five or so
+clients, don’t be surprised if you see four clients connect to pod A and only one client connect to
+pod B. With a higher number of clients or pods, this problem is not so apparent.
+
+When a new service is created, a virtual IP address is assigned to it immediately. The kube-proxy
+agents watch for new services and make them addressable on the node they are running on. This is
+done by setting up a few *iptables rules*, which make sure each packet destined for the service
+IP/port pair is intercepted and its destination address modified before reaching the network
+interface of the node. The IP address of the service is **virtual**: it is never listed as either
+the source or the destination IP address in a network packet when the packet leaves the node. This
+is the reason why curling a service works, but pinging it does not; the service’s cluster IP is a
+virtual IP and only has meaning when combined with the service port.
+
+<p align="center">
+  <img src="./resources/kube-proxy.png" alt="OS"/>
+</p>
+Besides watching the API server for new services, kube-proxy agents are responsible to watch for
+changes in endpoints and services Kubernetes objects. The figure shows what the kube-proxy does and
+how a packet sent by a pod reaches one of the pods backing the service. The packet’s destination is
+initially set to the IP and port of the service. After the packet leaves the local process and
+before being sent to the network, the packet is first handled by node’s kernel according to the
+iptables rules set up on the node. The kernel checks if the packet matches any of those iptables
+rules. One of them says that if any packet has the destination IP equal to 172.30.0.1 and
+destination port equal to 80, the packet’s destination IP and port should be replaced with the IP
+and port of a randomly selected pod. The kube-proxy is the component responsible for configuring
+such iptables rules.
