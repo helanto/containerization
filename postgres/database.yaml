@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres-server
+  labels:
+    app: database
+spec:
+  containers:
+  - image: postgres-image
+    imagePullPolicy: "IfNotPresent"
+    name: postgres-container
+    ports:
+    - containerPort: 5432
+      protocol: TCP
+    volumeMounts:
+    - name: postgres-storage
+      mountPath: /var/lib/postgresql/data
+    env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        configMapKeyRef:
+          # Name of the configMap
+          name: postgres-configuration
+          # The key of interest
+          key: password
+    - name: POSTGRES_USER
+      valueFrom:
+        configMapKeyRef:
+          # Name of the configMap
+          name: postgres-configuration
+          # The key of interest
+          key: username
+    - name: POSTGRES_DB
+      value: "db"
+    resources:
+      requests:
+        cpu: "0.5"
+        memory: "512Mi"
+      limits:
+          cpu: "1"
+          memory: "1Gi"
+    livenessProbe:
+      tcpSocket:
+        port: 5432
+      initialDelaySeconds: 30
+      periodSeconds: 20
+      failureThreshold: 3
+
+  # Mount a volume so that the container can persist data.
+  volumes:
+    - name: postgres-storage
+      hostPath:
+        # This one is used inside minikube, which is itself a docker container.
+        # First you need to run minikube mounting your local directory.
+        # For example: minikube start --mount-string='/minikube-data:/minikube-host' --mount=true
+        path: "/minikube-host/postgres/data"
+
+  restartPolicy: OnFailure
