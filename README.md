@@ -8,47 +8,23 @@
   * [Set up](#set-up)
   * [Tear down](#tear-down)
 
-- [The K8s resources](#the-k8s-resources)
-  * [Getting information](#getting-information)
-  * [Creating and deleting resources](#creating-and-deleting-resources)
-  * [Debugging](#debugging)
-
-- [Pods](#pods)
-  * [Command and arguments](#command-and-arguments)
-
-- [Labels and annotations](#labels-and-annotations)
-
-- [Replica sets](#replica-sets)
-  * [Pod acquisition](#pod-acquisition)
-  * [Isolating pods](#isolating-pods)
-  * [Autoscaling](#autoscaling)
-  * [Final thoughs on replica sets](#final-thoughs-on-replica-sets)
-
-- [Daemon sets](#daemon-sets)
-  * [Pod and node selectors](#pod-and-node-selectors)
-  * [Rolling update](#rolling-update)
-
-- [Jobs](#jobs)
-  * [Job patterns](#job-patterns)
-  * [Completion](#completion)
-
-- [Config Maps](#config-maps)
-  * [Injecting configuration into pods](#injecting-configuration-into-pods)
-
-- [Deployments](#deployments)
-  * [Replica set selectors](#replica-set-selectors)
-  * [Upgrades](#upgrades)
-  * [Rollout information](#rollout-information)
-  * [Rollbacks](#rollbacks)
-  * [Strategies](#strategies)
-
-- [Services](#services)
-  * [The Domain Name System (DNS)](#the-domain-name-system-dns)
-  * [Endpoints](#endpoints)
-  * [Type of services](#type-of-services)
+- [Kubernetes resources](#kubernetes-resources)
+  * [Pods](#pods)
+  * [Labels and annotations](#labels-and-annotations)
+  * [Replica sets](#replica-sets)
+  * [Daemon sets](#daemon-sets)
+  * [Jobs](#jobs)
+  * [Config Maps](#config-maps)
+  * [Deployments](#deployments)
+  * [Services](#services)
+    - [The Domain Name System (DNS)](#the-domain-name-system-dns)
+    - [Endpoints](#endpoints)
+    - [Type of services](#type-of-services)
 
 - [Kubernetes internals](#kubernetes-internals)
-  * [Service Proxy](#service-proxy)
+  * [API server](#api-server)
+  * [Controller manager](#controller-manager)
+  * [Service proxy](#service-proxy)
 
 ## Setting the scene
 
@@ -79,14 +55,16 @@ $ minikube start --namespace='default' --mount=true --mount-string="$PWD/minikub
 $ minikube dashboard
 ```
 
-Your cluster should be up and running. A cluster is a collection of cooperating nodes In Kubernetes,
+Your cluster should be up and running. A cluster is a collection of cooperating nodes. In Kubernetes,
 nodes are seperated into:
-1. Master nodes that contain containers like the API server, scheduler, etc., which manage the cluster.
-1. Worker nodes where your containers will run.
+1. **Master nodes** which host the **Kubernetes control plane**. The control plane consists of
+  multiple components that can run on a single or multiple master nodes. Such components control and
+  manage the cluster.
+1. **Worker nodes** where the application containers run. Kubernetes won’t generally schedule
+  applications onto master nodes to ensure that user workloads don’t harm the overall operation of
+  the cluster.
 
-Kubernetes won’t generally schedule work onto master nodes to ensure that user workloads don’t harm
-the overall operation of the cluster. Because we are running Kubernetes locally, we have an one-node
-cluster.
+Since we are running Kubernetes locally, we are dealing with a single-node cluster.
 ```bash
 $ kubectl get nodes
 NAME       STATUS   ROLES                  AGE   VERSION
@@ -120,7 +98,7 @@ $ minikube status
 $ minikube delete
 ```
 
-## The K8s resources
+## Kubernetes resources
 Everything contained in Kubernetes is represented by a *RESTful resource* or *Kubernetes object*.
 Each Kubernetes object exists at a unique HTTP path, for example https://your-k8s.com/api/v1/namespaces/default/pods/my-pod
 leads to the representation of a pod in the     default namespace named my-pod. The **kubectl command**
@@ -131,7 +109,7 @@ Kubernetes master is running at https://127.0.0.1:53953
 KubeDNS is running at https://127.0.0.1:53953/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
 ```
 
-### Getting information
+#### Getting information
 The most basic command for viewing Kubernetes objects via **kubectl** is **get**. It gets a listing
 of all resources in the current namespace (e.g. all pods, deployments, configMaps, etc.).
 ```bash
@@ -150,7 +128,7 @@ command:
 $ kubectl describe <resource-name> <object-name>
 ```
 
-### Creating and deleting resources
+#### Creating and deleting resources
 Objects in the Kubernetes API are represented as *JSON* or *YAML* files. Let’s assume that you have
 a simple object stored in `obj.yaml`. You can use **kubectl** to create this object in Kubernetes by
 running:
@@ -167,7 +145,7 @@ $ kubectl delete -f obj.yaml
 $ kubectl delete <resource-name> <object-name>
 ```
 
-### Debugging
+#### Debugging
 You can see the logs of a resource using the **log** command. In case multiple containers are
 running to a single pod you can specify the container of interest.
 ```bash
@@ -181,7 +159,7 @@ $ kubectl exec -it <pod-name> -- /bin/bash
 This will provide you with an interactive shell inside the running container so that you can perform
 more debugging.
 
-## Pods
+### Pods
 Many times containerized applications need to colocate into a single atomic unit, scheduled onto a
 single machine. Such containerized applications need to work together symbiotically, forming a
 single cohesive unit of service; for example, one container serving data stored in a shared volume
@@ -277,7 +255,7 @@ spec:
       type: Directory
 ```
 
-### Command and arguments
+#### Command and arguments
 When you create a pod, you can define a command and arguments for each container that run in the
 pod. To define a command, include the `spec.containers[].command` field in the configuration file.
 To define arguments for the command, include the `spec.containers[].args` field in the configuration
@@ -289,7 +267,7 @@ When using docker runtime:
   - The `command` corresponds to dockerfile's `ENTRYPOINT`.
   - The `args` corresponds to dockerfile's `CMD`.
 
-## Labels and annotations
+### Labels and annotations
 Labels are key-value pairs that are attached to Kubernetes objects, such as pods or replica sets.
 Labels provide identifying metadata for Kubernetes objects. They provide the foundation for
 searching, grouping and viewing objects. Annotations on the other hand are key-value pairs designed
@@ -323,7 +301,7 @@ spec:
     accelerator: nvidia-tesla-p100
 ```
 
-## Replica sets
+### Replica sets
 More often than not, you want multiple replicas of an application running at a particular time. The
 purpose of a ReplicaSet Kubernetes object is to maintain a stable set of replica pods running at any
 given time. Of course, you could manually create multiple copies of a pod using multiple different
@@ -332,7 +310,7 @@ sets you can manage a replicated set of pods as a single entity. Pods managed by
 automatically rescheduled under certain failure conditions such as node failures and network
 partitions.
 
-### Pod acquisition
+#### Pod acquisition
 One of the key themes that runs through Kubernetes is decoupling. In this spirit, the relationship
 between replica sets and pods is loosely coupled. Though replica sets create and manage pods, they
 do not own the pods they create. Replica sets use labels to identify the set of pods they should be
@@ -347,7 +325,7 @@ Existing pods acquired by the replica set (based on the pod seletion criteria) m
 different templates. It also implies that changing the pod template will not affect already existing
 pods.
 
-### Isolating pods
+#### Isolating pods
 Oftentimes, when a server misbehaves, it is desirable to attach to the pod and interactively debug
 it. In case the pod's health checks are incomplete, a pod can be misbehaving but still be part of
 the replicated set. In such cases, instead of killing the pod, one can modify the labels of the sick
@@ -355,7 +333,7 @@ pod. Doing so, will disassociate it from the replica set. The controller of the 
 spawn a new copy, but because the sick pod is still running it is available for interactive
 debugging.
 
-### Autoscaling
+#### Autoscaling
 While there will be times when you want to have explicit control over the number of replicas, often
 you simply want to have “enough” replicas. You might want to scale based on memory consumption, CPU
 usage, or in response to any custom application metric.
@@ -378,7 +356,7 @@ spec:
   targetCPUUtilizationPercentage: 50
 ```
 
-### Final thoughs on replica sets
+#### Final thoughs on replica sets
 Typically, pods part of a replica set are fronted by a Kubernetes service load balancer, which
 spreads traffic across the pods that make up the service. Generally speaking, replica sets are
 designed for stateles (or nearly stateless) services. When a replica set is scaled down, an
@@ -386,7 +364,7 @@ arbitrary pod is selected for deletion. Using the `controller.kubernetes.io/pod-
 annotation, users can set a preference regarding which pods to remove first when downscaling a
 replica set.
 
-## Daemon sets
+### Daemon sets
 Replica sets are generally about creating a service (e.g., a web server) with multiple replicas for
 redundancy. But that is not the only reason you may want to replicate a set of pods within a
 cluster. Another reason to replicate a set of pods is to schedule a single pod on every node within
@@ -394,13 +372,13 @@ the cluster. Generally, the motivation for replicating a pod to every node is to
 agent or daemon on each node. Daemon sets are used to deploy system daemons such as *log collectors*
 and *monitoring agents*, which typically must run on every node.
 
-### Pod and node selectors
+#### Pod and node selectors
 The `spec.selector` field is a pod selector, specifying the pods that are part of the daemon set. If
 a pod matching the labels of the pod selector already exists in the node (and is not owned by anyone
 else), it will be acquired by the daemon set. If you specify a `spec.template.spec.nodeSelector`,
 then the daemon set controller will create pods on nodes which match that node selector.
 
-### Rolling update
+#### Rolling update
 DaemonSet has two update strategy types:
 - `OnDelete`: After you update a daemon set manifest, new pods will only be created when you manually delete old DaemonSet pods.
 - `RollingUpdate`: After you update a daemon set manifest, old pods will be killed, and new pods will be created automatically, in a controlled fashion.
@@ -410,7 +388,7 @@ configuration. However, this approach has a major drawback: **downtime**. When a
 deleted all pods managed by that daemon set will also be deleted. Depending on the size of your
 container images, recreating a daemon set may push you outside of your SLA thresholds.
 
-## Jobs
+### Jobs
 So far we have focused on long-running workloads such as databases and web applications. While
 long-running processes make up the large majority of workloads, there is often a need to run
 *short-lived*, *one-off* tasks. A job creates one or more pods and will continue to retry execution
@@ -425,13 +403,13 @@ overlap with any other jobs. Like with other controllers (daemon sets, replica s
 etc.) that use labels to identify a set of pods, unexpected behaviors can happen if a pod is reused
 across objects.
 
-### Job patterns
+#### Job patterns
 There are three main types of task suitable to run as a job:
   1. `One-shot`: only one pod is started, unless the pod fails. This is suitable for tasks like database migrations.
   2. `Parallel jobs with fixed completion count`: multiple pods processing a fixed set of work in parallel.
   3. `Parallel Jobs pulling tasks from a work queue:`: multiple pods processing from a centralized work queue. This requires running a queue service, and modifications to the existing application to make it use the work queue.
 
-### Completion
+#### Completion
 It is possible to specify a `spec.completionMode: Indexed`, in case we want to differentiate between
 pods of the same job. Each pod gets an associated completion index from `0` to `spec.completions - 1`,
 which is available in the annotation `batch.kubernetes.io/job-completion-index`. The value of the
@@ -445,7 +423,7 @@ view its status. It is up to the user to delete old jobs.
 $ kubectl delete jobs <job-name>
 ```
 
-## Config Maps
+### Config Maps
 Config maps are used to provide non-confidential configuration information for Kubernetes workloads
 in the form of key value pairs. This can either be fine-grained information (a short string) or a
 composite value in the form of a file. Pods can consume config maps as environment variables,
@@ -457,7 +435,7 @@ These fields accept key-value pairs as their values. The `data` field is designe
 byte sequences while the `binaryData `field is designed to contain binary data as base64-encoded
 strings.
 
-### Injecting configuration into pods
+#### Injecting configuration into pods
 There are four different ways that you can use a config map to configure a container inside a pod:
   1. `Command-line arguments`: in the `command` and `args` fields of a container.
   1. `Environment variable`: sets the value of environmental variables of a container.
@@ -527,11 +505,11 @@ map is updated to the moment when new keys are projected to the pod can be as lo
 period + cache propagation delay, where the cache propagation delay depends on the chosen cache type
 (it equals to watch propagation delay, ttl of cache, or zero correspondingly).
 
-## Deployments
+### Deployments
 Deployment objects help manage the release of new versions of your application. With a deployment
 object you can simply and reliably rollout new software versions without downtime or errors.
 
-### Replica set selectors
+#### Replica set selectors
 Deployments manage replica sets, the same way replica sets manage pods. A deployment can adopt an
 already existing replica set if it matches the `spec.selector` field. At a first glance, the
 specification for a deployment looks very much like the one for a replica set. Deployments, however,
@@ -544,7 +522,7 @@ hashing the pod manifest of the replica set and using the resulting hash as the 
 value that is added to the replica set selector, pod template labels, and in any existing pods that
 the replica set might have.
 
-### Upgrades
+#### Upgrades
 Things get interesting when we need to update the pod specification itself. This is a common use
 case due to bug fixes, change in business requirements and so on. For instance, we might want to
 change the image to use (because we are releasing a new version), or the application’s parameters
@@ -586,7 +564,7 @@ spec:
       app: some-app
 ```
 
-### Rollout information
+#### Rollout information
 During an upgrade you can inspect the status of the rollout using the `rollout status` command.
 ```bash
 $ kubectl rollout status deployments <deployment-name>
@@ -601,7 +579,7 @@ Waiting for deployment "<deployment-name>" rollout to finish: 1 old replicas are
 deployment "<deployment-name>" successfully rolled out
 ```
 
-### Rollbacks
+#### Rollbacks
 Sometimes, you may want to rollback a deployment; for example, when the deployment is not stable. By
 default, all of the deployment's rollout history is kept in the system so that you can rollback
 anytime you want.
@@ -617,7 +595,7 @@ You can select the revision you want to rollback and apply the change.
 $ kubectl rollout undo deployments <deployment-name> --to-revision=<revision-num>
 ```
 
-### Strategies
+#### Strategies
 There are two different strategies for rolling out an update:
   - `spec.strategy.type: RollingUpdate`, updates pods in a rolling update fashion.
   - `spec.strategy.type: Recreate`, all existing pods are killed before spawning new ones.
@@ -634,7 +612,7 @@ example, 5) or a percentage of desired pods (for example, 10%). For example, whe
 to 30%, the new replica set can be scaled up immediately when the rolling update starts, such that
 the total number of old and new Pods does not exceed 130% of desired pods.
 
-## Services
+### Services
 Pods are indented to be **ephemeral**. Each pod gets its own IP address, however in a replica set or
 deployment, the set of pods running in one moment in time could be different from the set of pods
 running the same application a moment later. The ephemeral nature of pods leads to a significant
@@ -666,11 +644,11 @@ spec:
 
 Each service has an IP address and port that never change while the service exists. Clients can open connections to that IP and port, and those connections are then routed / forwarded to one of the pods backing that service. This way Kubernetes achieves **load-balancing** across all the backing pods. The IP address associatted to a service is usually referred to as cluster IP, because it’s only accessible from inside the Kubernetes cluster.
 
-### The Domain Name System (DNS)
+#### The Domain Name System (DNS)
 
 By creating a service, you now have a single and stable IP address that you can hit to access your pods. This address will remain unchanged throughout the whole lifetime of the service. Pods behind this service may come and go, but they will always be accessible through the service’s single and constant IP address. But how do the clients know the IP and port of a service ? Each service gets a DNS entry in the Kubernetes internal name server, and client pods only need to know the name of the service.
 
-#### Introduction
+##### Introduction
 DNS is a naming system for resolving human-readable domain names to their associated IP addresses.
 DNS is a **hierarchically organized distribued server-based system** that acts as the phone book of
 the internet. People do not have to remember meaningless IP address numbers and can look up websites
@@ -736,7 +714,7 @@ domain name. Root name servers are replicated and spread around the world.
 google    amazon    speedtest  olympiacos  wikipedia
 ```
 
-#### Name servers
+##### Name servers
 All DNS name servers fall into one of two categories: **recursive resolvers** and **authoritative name servers**. DNS servers operate using UDP, on well-known port number 53.
 
 A recursive resolver is the first stop in a DNS query. The recursive resolver acts as a middleman
@@ -755,7 +733,7 @@ recursive DNS servers about the correct IP address assigned to a domain name. Ea
 like `www.google.com` (e.g. `.com` or `.google`) has a specific authoritative DNS nameserver (or
 group of redundant authoritative nameservers).
 
-#### Queries
+##### Queries
 A DNS query is a request for information sent from a client to a DNS name server. Normally, it
 requests for the IP address related to a fully qualified domain name (FQDN). A DNS query can be
 either **recursive** or **iterative**.
@@ -861,7 +839,7 @@ Another useful command line utility for interactively querying DNS name servers 
 $ nslookup -query=A www.olympiacos.org 8.8.8.8
 ```
 
-#### Record types
+##### Record types
 There is a [variety](https://en.wikipedia.org/wiki/List_of_DNS_record_types) of resource record types. The most prominent ones are the following:
   * `A` records resolve IPv4 addresses.
   * `AAAA` records resolve IPv6 addresses.
@@ -869,7 +847,7 @@ There is a [variety](https://en.wikipedia.org/wiki/List_of_DNS_record_types) of 
   * `MX` records resolve email addresses.
   * `NS` records resolve domain names (e.g. `com` or `org`) to the corresponding authoritative name servers.
 
-#### The /etc/resolv.conf
+##### The /etc/resolv.conf
 When using `DHCP`, it usually rewrites `/etc/resolv.conf` with information received from the DHCP
 server. The `/etc/resolv.conf` is the configuration file of the DNS client.
 ```bash
@@ -885,7 +863,7 @@ The most important configuration options are:
   * The `search` directive contains a list of domain search paths that will be queried for any names. Suppose search list is `[default.svc.cluster.local, svc.cluster.local, cluster.local]` and the query is `nginx` so resolver will query name server for the names `nginx.default.svc.cluster.local`, `nginx.svc.cluster.local` and `nginx.cluster.local`.
   * The `options` directive specify a set of options as described in the [manual](https://linux.die.net/man/5/resolv.conf).
 
-#### DNS on Kubernetes
+##### DNS on Kubernetes
 DNS is a built-in Kubernetes service. Kubernetes schedules a DNS pod and service on the cluster, and configures individual containers to use the DNS service IP to resolve DNS names. In our case, the DNS service runs on `kube-system` namespace. Every service defined in the cluster (including the DNS service itself) is assigned a DNS name.
 ```bash
 $ kubectl get services -n kube-system -o wide
@@ -907,7 +885,7 @@ A DNS query may return different results based on the namespace of the pod makin
 Services are just one of the two Kubernetes objects that get DNS records, pods being the other one.
 In general a pod has the following DNS resolution: `<pod-ip-address>.<namespace>.pod.<cluster-domain-suffix>`. For example, if a pod in the `default` namespace has the IP address `172.17.0.3`, and the domain name for your cluster is `cluster.local`, then the pod has a DNS name of `172-17-0-3.default.pod.cluster.local`. Notice the dashes instead of dots in the IP address and the `pod` instead of `svc` in the object type.
 
-### Endpoints
+#### Endpoints
 We discussed that services expose a unified API to pods based on some selection criteria. This is not entirely true: **services do not link to pods directly**. Instead, the *endpoints* Kubernetes resource sits in between. The endpoints resource is just a mapping to the actual pod IP addresses the service exposes.
 ```bash
 $ kubectl get endpoints
@@ -917,9 +895,9 @@ nginx        172.17.0.3:80,172.17.0.4:80,172.17.0.5:80   25h
 
 Having the endpoints decouled from the service allows for great flexibility. If you create a service without a pod selector, Kubernetes won’t even create the endpoints resource. It’s up to you to specify the list of endpoints for the service. You can create a service backed by an endpoints resource linking to both `google.com` and `facebook.com` at the same time. You can link a service to an endpoints resource by using the same `metadata.name` property.
 
-### Type of services
+#### Type of services
 
-#### ClusterIP
+##### ClusterIP
 The type of a Kubernetes service is defined by `spec.type` field. The most commonly used type of
 service is the `ClusterIP`. This exposes the service on a cluster-internal IP address. We can use
 this internal IP address to communicate with a set of pods. The service will act as a proxy to the
@@ -927,14 +905,14 @@ pods forwarding traffic to any of them in a *random* or *round-robin* fashion. T
 significant improvement compared to a world without services, in which clients have to memorize IP
 addresses of ephemeral pods instead of a single, constant IP address.
 
-#### NodePort
+##### NodePort
 The problem with `ClusterIP` services is that they can only be consumed by pods from within the
 cluster. By creating a `NodePort` service, each cluster node opens a port on the node itself (hence
 the name) and redirects traffic received on that port to the underlying service. A `NodePort`
 service is not a stand-alone utility. Instead, a `ClusterIP` service is utilized under the hood, but
 this time the service is available from the outside if you query the appropriate node ports.
 
-#### LoadBalancer
+##### LoadBalancer
 A `LoadBalancer` service is an extension of a `NodePort` service. With `NodePort` services, we
 managed to expose our services to external clients by giving access to a specific port on the
 underlying cluster nodes. However, we are back to a similar problem: our clients have once again to
@@ -953,7 +931,7 @@ thus access your service through the load balancer’s IP address.
   <img src="./resources/services.png" alt="OS"/>
 </p>
 
-#### Ingress
+##### Ingress
 Why do we yet need another service type ? One important reason is that each `LoadBalancer` service
 requires its own load balancer with its own public IP address, whereas an `Ingress` only requires
 one, even when providing access to dozens of services. 
@@ -1005,7 +983,7 @@ spec:
   <img src="./resources/ingress.png" alt="OS"/>
 </p>
 
-### Headless service
+#### Headless service
 A headless service is a `ClusterIP` service without a cluster IP address assigned to it. Usually,
 when you perform a DNS query for a service, the DNS server returns a single IP: the cluster IP
 address of the service. But if you have a headless service (which does not have a cluster IP
@@ -1023,6 +1001,162 @@ The concept of service port being different from targetPort does not apply to he
 port translation is happening as part of the layer-4 load-balancing, but headless really means **no load-balancer**.
 
 ## Kubernetes internals
+So far, we have developed a solid understanding of what clients can do with Kubernetes, but we
+haven't yet discussed how Kubernetes make deployed resources come to life.
+
+<p align="center">
+  <img src="./resources/k8s-architecture.png" alt="OS"/>
+</p>
+
+The Kubernetes system components are separated into two broad categories: the ones which are
+deployed on master nodes (also known as *control plane* components), and the ones that are deployed
+on worker nodes. Do we need to install components on every node as a system process ? The control
+plane components, as well as *kube-proxy*, can either be deployed on the system directly or they can
+run as pods. The *kubelet* is the only component that always runs as a regular system component, and
+it is kubelet that then runs all the other components as pods.
+
+### API server
+At the core of a Kubernetes cluster lies the *API server*. It is the component of Kubernetes control
+plane that exposes the Kubernetes API. You can think of it as the front end or the gateway to your
+Kubernetes cluster. The server provides a CRUD (Create, Read, Update, Delete) interface for querying
+and modifying the cluster state over a *RESTful API*.
+
+Out of all system components presented in the previous section, the *API server* stands out. It is
+the central component used by all other components (`kube-proxy`, `kubelet`, `scheduler`, etc.) and
+clients (e.g.`kubectl`). In Kubernetes, all system components communicate only with the API server;
+they don’t talk to each other directly. Moreover, the direction of every communication link is
+important. Connections between the API server and the other components are almost always initiated
+by the components.
+
+#### Terminology
+Before describing the Kubernetes HTTP API, we need to establish some common understanding on how the API is formed. A **kind** is the type of an entity in the Kubernetes universe. Kinds are grouped into [three categories](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#types-kinds): objects (e.g. `Pod`, `Deployment`), list of kinds (e.g. `PodList`) and special purpose kinds. When contacting the API server, clients do not specify the kind, but instead they need to provide the **resource** name. A resource is the use of a kind in the API. For instance, the `pods` resource corresponds to the `Pod` kind and the `namespaces` resource refers to the `Namespace` kind. Notice  that resources are always lowercase, and by convention are the lowercase form of the kind. Usually, there’s a one-to-one mapping between kinds and resources. However, sometimes, the same kind may be returned by multiple resources.
+
+An **API group** is a collection of kinds of related functionality. For example the `batch` API group contains the `Job` and `ScheduledJob` kinds. Each API group can exist in multiple **versions**. For example, a group first appears as `v1alpha1`, it is then promoted to `v1beta1` and finally graduates to `v1`.
+
+Group names are typically in domain name form; when choosing a group name, it is recommended to select a subdomain your group or organization owns, such as *whatever.mycompany.com*. The Kubernetes project reserves use of the **empty group**, all **single-word groups** (e.g. "*batch*", "*extensions*", or "*apps*"), and **any group name ending in "*.k8s.io*"** for its sole use.
+
+An API group, a version and a resource (GVR) uniquely defines a HTTP path. All Kubernetes requests
+begin with the prefix `/api/` (the core APIs) or `/apis/` (APIs grouped by API group). The reasons
+behind having two different sets of paths are primarily historical. API groups did not originally
+exist in the Kubernetes API, so the original or “core” objects, like pods, configmaps and services, are maintained under the `/api/` prefix without an API group. Finally, there may be some resources that are cluster-wide such as nodes or namespaces, while others are binded to a specific namespace (*namespaced* resources).
+```bash
+$ curl https://your-k8s.com/apis/{group}/{version}/namespaces/{namespace}/{resource}
+$ curl https://your-k8s.com/api/{version}/namespaces/{namespace}/{resource}
+```
+
+#### Exploring the API
+First off, to simplify things, we use the built-in `kubectl proxy` command to connect to the cluster. The command creates a proxy server running on port 8080 that accepts HTTP connections and proxies them to the *API server* while taking care of authentication. This way you don’t need to pass the authentication token in every request.
+```bash
+$ kubectl cluster-info
+Kubernetes control plane is running at https://127.0.0.1:63039
+$ curl https://127.0.0.1:63039 --insecure
+Forbidden
+$ kubectl proxy --port=8080
+Starting to serve on 127.0.0.1:8080
+$ curl -X GET "127.0.0.1:8080/api/v1"
+{
+  "kind": "APIResourceList",
+  "groupVersion": "v1",
+  "resources": [
+    {
+      "name": "pods",
+      "singularName": "",
+      "namespaced": true,
+      "kind": "Pod",
+      "verbs": [
+        "create",
+        "delete",
+        "deletecollection",
+        "get",
+        "list",
+        "patch",
+        "update",
+        "watch"
+      ],
+      "shortNames": [
+        "po"
+      ]
+    },
+    {
+      "name": "pods/exec",
+      "singularName": "",
+      "namespaced": true,
+      "kind": "PodExecOptions",
+      "verbs": [
+        "create",
+        "get"
+      ]
+    },
+    {
+      "name": "pods/log",
+      "singularName": "",
+      "namespaced": true,
+      "kind": "Pod",
+      "verbs": [
+        "get"
+      ]
+    },
+    {
+      "name": "pods/status",
+      "singularName": "",
+      "namespaced": true,
+      "kind": "Pod",
+      "verbs": [
+        "get",
+        "patch",
+        "update"
+      ]
+    }
+  ]
+}
+```
+Looking at the reponse, we get back kinds of all three available [categories](#terminology): normal objects (e.g. `Pod`), collection of objects (e.g. `APIResourceList`) and special purpose kinds (e.g. `PodExecOptions`). Moreover, we see different resources belonging to the same kind. For instance, the kind `Pod` is exposed as a "*pods*" resource that allows users to create, update, and delete pods, while a separate "*pod status*" resource (that acts on `Pod` kind) allows automated processes to update a subset of the fields in that resource. Delving deeper into the response, the `resources[].name` field corresponds to the name of the resource. It also indicates its subpath in the API. The `resources[].verbs` field indicates what kinds of actions can be taken on that resource.
+
+#### The lifecycle of a request
+To better understand what the API server is doing for each request, we will take apart and describe the flow of a single request.
+
+The API server first **authenticates** the identity of the client associated with the request. Different modes of establishing identity are supported, including *client certificates*, *bearer tokens*, and *HTTP basic authentication*. In addition to the standard methods of establishing identity, authentication is pluggable, and there are several plugin implementations that use remote identity providers.
+
+After the API server has determined the identity for a request it **authorizes** the user to perform the requested action on the specified resource. For example, when creating pods, the API server consults all authorization plugins in turn, to determine whether the user can create pods in the requested namespace.
+
+After a request has been authenticated and authorized. the API server **validates** and **transforms** it. While authentication and authorization (RBAC) determine whether the request is allowed to  occur, admission control determines whether the request is well formed and potentially applies modifications to the request before it is processed (e.g. apply default values to missing fields, enforce existence of certain labels). The service mesh `Istio` uses this approach to inject a sidecar container into every pod transparently.
+
+Finally, it  **stores** state into persistent storage. The server itself is stateless and can be replicated to handle request load and for fault tolerance.
+
+The API server is not responsible for creating resources or deploying them to the cluster. That’s
+what **controllers** in the **controller manager** (yet another control plane component) do. But the API server does not even tell these controllers what to do. All it does is enable those controllers and other components to observe changes to deployed resources. Clients can request to be notified when a resource is created, modified, or deleted. This enables the component to perform whatever task it needs in response to a change of the cluster metadata.
+
+Clients **watch** for changes by opening an HTTP connection to the API server. Through this
+connection, the client will then receive a stream of modifications to the watched objects. Every
+time an object is updated, the server sends the new version of the object to all connected clients
+watching the object.
+
+```bash
+$ kubectl proxy --port=8080
+Starting to serve on 127.0.0.1:8080
+$ curl 127.0.0.1:8080/api/v1/namespaces/default/pods
+...
+$ curl 127.0.0.1:8080/api/v1/nodes
+...
+$ curl 127.0.0.1:8080/api/v1/watch/namespaces/default/pods/ubuntu
+```
+
+### Controller manager
+As previously mentioned, the API server does not do anything except for storing resources in etcd and notifying clients about changes. There is another component that makes sure the actual state of the system converges toward the desired state. This work is done by *controllers* running inside the *controller manager*. A controller ensures that a specific resource is at the desired state dictated by a declared definition. If a resource deviates from the desired state, the controller is triggered to do the necessary actions to get the resource state back to where it should be. A controller implements **control / reconciliation loops** that repeatedly compare the desired state of the cluster to its actual state. When the two diverge, a controller takes action to make them match.
+
+<!-- Resources are descriptions of what should be running in the cluster, whereas the controllers are the active Kubernetes components that perform the actual work of mirroring desired and actual state. -->
+
+There are various built-in controllers running in the controller manager (e.g. `node controller`, `service controller`, `deployment controller` and more); one for almost every resource you can create. Pods stand out since they are not deployed by any controller. Instead the `kubelet` component installed in every node is responsible to continuously monitor the API server for pods that have been scheduled to the node, and start the corresponding containers.
+
+Many controllers create new Kubernetes objects as part of a reconciliation loop (e.g. a deployment might create a replica set). These objects are owned by the object responsible for their creation. This relationship is important and is recored in `metadata.ownerReferences` field of the resource. It is common for controllers to **watch for changes** to the resource type that they reconcile and resource types of objects they create. e.g. a *replicaset controller* watches for changes to *replicaset* and *pod* resources. The controller will trigger the reconcile function in response to either an event for that *replicaset*  (e.g. spec update) or in response to an event for a *pod* created by that replicaset (e.g. a pod failure).
+
+Controllers do not talk to each other directly; they only communicate with the API server. They instruct the API server to create or remove a resource, or watch for events for the resources they reconcile. When a controller creates a resource in the API server, other components in the control plane act on the new information, and eventually the work is done. In the following figure the deployment controller does not run any pods or containers itself. Instead, it tells the API server to create or remove pods on its behalf according to the deployment specification.
+<p align="center">
+  <img src="./resources/controller-loop.png" alt="OS"/>
+</p>
+
+#### Controller or Operator ?
+There is some confusion around the use of the term controller in the Kubernetes community. Namely, how is a controller different than an operator ? The term operator has been introduced by [CoreOS](https://cloud.redhat.com/learn/topics/operators), and later adopted by [Kubernetes](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) itself. The operator pattern aims to capture the work of a human operator who is managing a service or set of services. Operators are application-specific controllers for a custom resource (see also [here](https://octetz.com/docs/2019/2019-10-13-controllers-and-operators/)). The most common way to deploy an operator is to add the `CRD` or `Custom Resource Definition` and its associated controller to the cluster. The controller will normally run outside of the control plane, much as you would run any containerized application. For example, you can run the controller in your cluster as a deployment or a pod.
 
 ### Service proxy
 Every worker node runs the *kube-proxy*, whose purpose is to make sure clients can connect to the
