@@ -1,4 +1,57 @@
 # Up and running with K8s
+
+## Contents
+
+- [Setting the scene](#setting-the-scene)
+
+- [Lifecycle](#lifecycle)
+  * [Set up](#set-up)
+  * [Tear down](#tear-down)
+
+- [The K8s resources](#the-k8s-resources)
+  * [Getting information](#getting-information)
+  * [Creating and deleting resources](#creating-and-deleting-resources)
+  * [Debugging](#debugging)
+
+- [Pods](#pods)
+  * [Command and arguments](#command-and-arguments)
+
+- [Labels and annotations](#labels-and-annotations)
+
+- [Replica sets](#replica-sets)
+  * [Pod acquisition](#pod-acquisition)
+  * [Isolating pods](#isolating-pods)
+  * [Autoscaling](#autoscaling)
+  * [Final thoughs on replica sets](#final-thoughs-on-replica-sets)
+
+- [Daemon sets](#daemon-sets)
+  * [Pod and node selectors](#pod-and-node-selectors)
+  * [Rolling update](#rolling-update)
+
+- [Jobs](#jobs)
+  * [Job patterns](#job-patterns)
+  * [Completion](#completion)
+
+- [Config Maps](#config-maps)
+  * [Injecting configuration into pods](#injecting-configuration-into-pods)
+
+- [Deployments](#deployments)
+  * [Replica set selectors](#replica-set-selectors)
+  * [Upgrades](#upgrades)
+  * [Rollout information](#rollout-information)
+  * [Rollbacks](#rollbacks)
+  * [Strategies](#strategies)
+
+- [Services](#services)
+  * [The Domain Name System (DNS)](#the-domain-name-system-dns)
+  * [Endpoints](#endpoints)
+  * [Type of services](#type-of-services)
+
+- [Kubernetes internals](#kubernetes-internals)
+  * [Service Proxy](#service-proxy)
+
+## Setting the scene
+
 Kubernetes is an open source orchestrator for deploying containerized applications. It provides the
 software necessary to successfully build and deploy reliable, scalable distributed systems.
 
