@@ -1,13 +1,11 @@
 # Up and running with K8s
 
 ## Contents
-
+- [Contents](#contents)
 - [Setting the scene](#setting-the-scene)
-
 - [Lifecycle](#lifecycle)
-  * [Set up](#set-up)
-  * [Tear down](#tear-down)
-
+  - [Set up](#set-up)
+  - [Tear down](#tear-down)
 - [Kubernetes resources](#kubernetes-resources)
   * [Pods](#pods)
   * [Labels and annotations](#labels-and-annotations)

@@ -1,0 +1,9 @@
+apiVersion: extensions.helanto.co/v1
+kind: Person
+metadata:
+  name: person-helias
+spec:
+  firstName: Helias
+  lastName: Antoniou
+  age: 30
+  socialSecurityNumber: 123456
