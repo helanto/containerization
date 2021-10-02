@@ -1,0 +1,89 @@
+# Default values for person-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: heliasantoniou/person-operator
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.0.1"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+pod:
+  args:
+    - "--protocol"
+    - "https"
+    - "--host"
+    - "kubernetes"
+    - "--port"
+    - "443"
+    - "--token-path"
+    - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    - "--cert-path"
+    - "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  env:
+    - name: CURL_CA_BUNDLE
+      value: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+role:
+  # Specifies the name of the role to be created
+  name: ""
+
+rolebinding:
+  # Specifies the name of the binding to be created
+  name: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+ingress:
+  enabled: false
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

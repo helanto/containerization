@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "person-operator.roleName" . }}
+  labels:
+    {{- include "person-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["extensions.helanto.co"]
+    resources: ["persons"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "delete"]

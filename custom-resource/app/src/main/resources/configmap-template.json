@@ -1,0 +1,17 @@
+{
+  "apiVersion":"v1",
+  "kind":"ConfigMap",
+  "metadata":{
+    "name":"[CFMAP_NAME]",
+    "namespace":"[NAMESPACE]",
+    "ownerReferences":[
+      {
+        "apiVersion":"extensions.helanto.co/v1",
+        "kind":"Person",
+        "name":"[PERSON_NAME]",
+        "uid":"[UID]"
+      }
+    ]
+  },
+  "data":{"person.json":"[PAYLOAD]"}
+}
