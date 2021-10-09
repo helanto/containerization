@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu
+  labels:
+    app: ubuntu
+spec:
+  serviceAccountName: serviceaccount-name
+  containers:
+  - image: ubuntu:20.04
+    imagePullPolicy: IfNotPresent
+    name: ubuntu
+    command: ["bin/bash", "-c"]
+    args: ["apt update && apt upgrade -y && apt install curl -y && while true; do sleep 30; done;"]
+    resources:
+      requests:
+        cpu: "0.1"
+        memory: "256Mi"
+      limits:
+          cpu: "0.2"
+          memory: "512Mi"
+  restartPolicy: OnFailure

@@ -20,7 +20,8 @@
     - [The Domain Name System (DNS)](#the-domain-name-system-dns)
     - [Endpoints](#endpoints)
     - [Type of services](#type-of-services)
-
+  * [Authentication](#authentication)
+    - [Service accounts](#service-accounts)
 - [Kubernetes internals](#kubernetes-internals)
   * [API server](#api-server)
   * [Controller manager](#controller-manager)
@@ -997,8 +998,72 @@ connecting to the service’s DNS name. But with headless services, because DNS 
 clients connect directly to the pods, instead of through the service proxy. **A headless services still provides load balancing across pods**,
 but through the *DNS round-robin mechanism* instead of through the service proxy.
 
-The concept of service port being different from targetPort does not apply to headless services. The
-port translation is happening as part of the layer-4 load-balancing, but headless really means **no load-balancer**.
+The concept of service port being different from targetPort does not apply to headless services. The port translation is happening as part of the layer-4 load-balancing, but headless really means **no load-balancer**.
+
+### Authentication
+Applications running on a K8s cluster often need information about the environment they are running in. [Service discovery](https://www.nginx.com/blog/service-discovery-in-a-microservices-architecture/) is a prominent example; an application does not have to know the IP addresses of the pods backing a service, just its DNS name. What about other information ? An application contacts the [K8s API server](#api-server) to learn about the current state of the cluster. In some cases, it might even need to [modify the state](#controller-manager). The necessity of an authentication mechanism is apparent; applications need to prove their identity when contacting the API server.
+
+#### Service accounts
+All Kubernetes clusters have two categories of users: **applications** managed by Kubernetes, and **human users**. When a human accesses the cluster (e.g. using `kubectl`), she is authenticated as a particular **user account** <sup>[1](#user-account)</sup>. Similar to human users, when applications contact the API server, they are authenticated as a particular **service account**.
+
+*A service account provides an identity for a running pod*. Every pod is associated with **exactly one** service account, but a service account might be shared between multiple pods. In Kubernetes terminology, a service account is just another resource, **scoped to a specific namespace** <sup>[2](#namespace-scoped)</sup>. Every namespace has a default service account called `default`. Unless instructed otherwise, applications are automatically assigned the `default` service account in the same namespace.
+```bash
+$ kubectl get sa
+NAME      SECRETS   AGE
+default   1         24h
+$ kubectl get pod <pod-name> -o json | jq -r .spec.serviceAccountName
+default
+```
+
+We can create additional service accounts by applying the corresponding manifest, or simpler by running `kubectl create serviceaccount <name> -n default`.
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-name
+  namespace: <namespace>
+```
+
+When inspecting the service account resource, one will notice that a **secret** has automatically been created and it is referenced by the service account.
+```bash
+$ kubectl get serviceaccount <serviceaccount-name> -o yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: <serviceaccount-name>
+  ...
+secrets:
+- name: <serviceaccount-name>-token-<id>
+$
+$ kubectl get secrets
+NAME                                TYPE                                  DATA   AGE
+<serviceaccount-name>-token-<id>    kubernetes.io/service-account-token   3      31h
+```
+
+The secret is a [service account token](https://kubernetes.io/docs/concepts/configuration/secret/#service-account-token-secrets), and is auto-mounted to all pods associated with the service account under `/var/run/secrets/kubernetes.io/serviceaccount/`. It contains three entries:
+  * The **CA root certificate** that will be used for TLS communication.
+  * The **bearer token** that will be used for authenticating the application with the API server.
+  * The **namespace** the pod is running on.
+
+All information is displayed in *base64 encoding* format. The reason for using base64 encoding is simple: the entries of a secret can contain binary values, not only plain text. Base64 encoding allows you to include the binary data in *YAML* or *JSON*, which are both plain text formats.
+```bash
+$ kubectl get secrets <serviceaccount-token> -o yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    kubernetes.io/service-account.name: <serviceaccount-name>
+  name: <serviceaccount-token>
+type: kubernetes.io/service-account-token
+data:
+  ca.crt: <base64-encoded-ca.crt>
+  namespace: <base64-encoded-namespace>
+  token: <base64-encoded-token>
+```
+
+<sup><a name="user-account">1</a></sup> User accounts default to `admin`, unless cluster administrators have customized the cluster.
+
+<sup><a name="namespace-scoped">2</a></sup> Most (but not all) Kubernetes resources are tight to a specific namespace. Names of resources need to be unique within a namespace, but not across namespaces. That gives users the flexibility to create the same service account across namespaces.
 
 ## Kubernetes internals
 So far, we have developed a solid understanding of what clients can do with Kubernetes, but we
@@ -1017,7 +1082,7 @@ it is kubelet that then runs all the other components as pods.
 
 ### API server
 At the core of a Kubernetes cluster lies the *API server*. It is the component of Kubernetes control
-plane that exposes the Kubernetes API. You can think of it as the front end or the gateway to your
+plane that exposes the Kubernetes API. You can think of it as the frontend or the gateway to your
 Kubernetes cluster. The server provides a CRUD (Create, Read, Update, Delete) interface for querying
 and modifying the cluster state over a *RESTful API*.
 
