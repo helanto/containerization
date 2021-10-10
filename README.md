@@ -22,6 +22,11 @@
     - [Type of services](#type-of-services)
   * [Authentication](#authentication)
     - [Service accounts](#service-accounts)
+  * [Authorization](#authorization)
+    - [Actions](#actions)
+    - [RBAC](#rbac)
+    - [Roles](#roles)
+    - [Role bindings](#role-bindings)
 - [Kubernetes internals](#kubernetes-internals)
   * [API server](#api-server)
   * [Controller manager](#controller-manager)
@@ -1064,6 +1069,68 @@ data:
 <sup><a name="user-account">1</a></sup> User accounts default to `admin`, unless cluster administrators have customized the cluster.
 
 <sup><a name="namespace-scoped">2</a></sup> Most (but not all) Kubernetes resources are tight to a specific namespace. Names of resources need to be unique within a namespace, but not across namespaces. That gives users the flexibility to create the same service account across namespaces.
+
+### Authorization
+Authentication is the act of validating that a service account is the one it claims to be. But, why should you bother with creating additional service accounts instead of using the `default` one for all your pods ? Service accounts are closely linked with **authorization**. The key idea is that different service accounts have different permissions to perform different [actions](#actions). When your cluster is not using proper authorization, creating and using additional service accounts doesn’t make much sense, since even the `default` service account is allowed to do anything. Creating additional service accounts is practically a must when you use the **RBAC** authorization policy.
+
+#### Actions
+Kubernetes clients use different types of **HTTP requests** (e.g. a `GET` or a `POST`) to specific **URL paths**. Each path represents a specific Kubernetes resource (for example, a pod or a deployment). Depending on the type of the resource (e.g. singular or plural), each HTTP request type is translated to a specific verb, as in the following table.
+HTTP method | Verb
+--- | --- 
+GET | get / list / watch
+POST | create
+PUT | update
+PATCH | patch
+DELETE | delete / deletecollection
+
+#### RBAC
+Role-based access control or RBAC for short, utilizes **user roles** in determining whether a service account is allowed to perform an action or not. A service or user account is associated with one or more roles and each role is allowed to perform certain [verbs](#actions) on certain resources. If a user has multiple roles, they may do anything that any of their roles allows them to do. Using `kubectl auth can-i` subcommand, one can query the authorization layer of a K8s cluster.
+```bash
+$ kubectl auth can-i create deployments --namespace default --as <username>
+yes
+```
+
+#### Roles
+A role contains rules that represent a set of permissions. Permissions are purely additive; there are no "deny" rules.
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+```
+
+As opposed to a role, which is scoped to a specific namespace, a cluster role is a cluster-wide resource. Hence, you cannot have two cluster roles with the same name. Because cluster roles are cluster-scoped, you can also use them to grant access to:
+  - Cluster-wide resources (e.g. nodes or namespaces).
+  - Non-resource endpoints (e.g. */healthz*).
+  - Namespaced resources (e.g. pods or deployments), **across all namespaces**.
+
+#### Role bindings
+A role defines what actions can be performed, but it doesn’t specify who can perform them. To do that, you must bind the role to a subject, which can be a user or a service account. While roles define what can be done, role bindings define who can do it. Role bindings grant the permissions defined in a role to a set of user or service accounts.
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+# You can specify more than one "subject"
+- kind: User
+  name: <user-name> # "name" is case sensitive
+  apiGroup: rbac.authorization.k8s.io
+- kind: ServiceAccount
+  name: <serviceaccount-name>
+  namespace: <serviceaccount-namespace>
+roleRef:
+  # "roleRef" specifies the binding to a Role / ClusterRole
+  kind: Role #this must be Role or ClusterRole
+  name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+```
 
 ## Kubernetes internals
 So far, we have developed a solid understanding of what clients can do with Kubernetes, but we
