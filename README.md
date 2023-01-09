@@ -8,6 +8,7 @@
   - [Tear down](#tear-down)
 - [Kubernetes resources](#kubernetes-resources)
   * [Pods](#pods)
+  * [Volumes](#volumes)
   * [Labels and annotations](#labels-and-annotations)
   * [Replica sets](#replica-sets)
   * [Daemon sets](#daemon-sets)
@@ -226,11 +227,11 @@ resources:
     memory: "128Mi"
 ```
 
-An important part of an application is access to persistent disk. The volumes that may be accessed
-by containers in a pod are defined in `spec.volumes` section. Then, each container needs to define
-the volumes it wants to mount and the respective path that the volumes are mounted. Note that two
-different containers in a pod can mount the same volume at different mount paths. Using shared
-volumes enables containers running in the same pod to share data between them.
+An important part of an application is access to [persistent storage](#volumes). The volumes that
+may be accessed by containers in a pod are defined in `spec.volumes` section. Then, each container
+needs to define the volumes it wants to mount and the respective path that the volumes are mounted.
+Note that two different containers in a pod can mount the same volume at different mount paths.
+Using shared volumes enables containers running in the same pod to share data between them.
 
 Other applications do not actually need a persistent volume, but they do need some access to the
 underlying host filesystem. For example, they may need access to the `/dev` filesystem in order to
@@ -270,6 +271,111 @@ command, the default command is used with your new arguments.
 When using docker runtime:
   - The `command` corresponds to dockerfile's `ENTRYPOINT`.
   - The `args` corresponds to dockerfile's `CMD`.
+
+### Volumes
+A container or a pod may fail and be restarted many times throughout the lifespan of an application.
+Each container in a pod has its own isolated filesystem because the filesystem comes from the image
+definition. There is an important implication to the aforementioned statement; any local change a
+container performs to its local filesystem will be lost when a container restarts. The new container
+will not see anything that was written to the filesystem by the previous container, even though the
+newly started container runs in the same pod.
+
+Kubernetes allows applications to persist data across pod and container restarts using the notion of
+storage volumes. A volume is available to all containers in the pod, but it must be mounted in each
+container that needs to access it. In each container, you can mount the volume in any location of
+its filesystem. This is similar to the way Linux allows users to mount a filesystem at arbitrary locations in the file tree.
+
+#### The emptyDir
+The `emptyDir` volume type is used to store transient data. The volume starts out as an empty
+directory. The application running inside the pod can then write any files it needs to it. Because the volume’s lifetime is tied to that of the pod, the volume’s contents are lost when the pod is
+deleted. How is this different from writing data directly to the local filesystem ? First off, a
+container’s filesystem may not even be writable. More importantly, the emptyDir volume is especially
+useful for sharing files between containers running in the same pod.
+
+#### The hostPath
+The `hostPath` volume type makes available a path on the host filesystem to the containers inside a
+pod. If a pod is deleted and the next pod uses a hostPath volume pointing to the same path, the new
+pod will see whatever was left behind by the previous pod, but only if it is scheduled to the same
+node as the first pod. If you are thinking of using a hostPath volume as the place to store your
+production data, think again. If your pod is rescheduled to another node, your application will not
+see any data.
+
+#### The NFS
+When an application running in a pod needs to persist data to disk and have that same data available
+even when the pod is rescheduled to another node, data must be stored in some type of
+network-attached storage (NAS). Different cloud providers (AWS, GCP, Azure) provide out-of-the-box
+solutions for such cases.
+
+#### Decoupling pods from the underlying storage technology
+All storage solutions we have seen so far couple the pod definition to the underlying storage technology. Including this type of infrastructure-related information into a pod definition means the pod definition is pretty much tied to a specific Kubernetes deployment. You can’t just take the pod definition and deploy it to another cluster expecting everything to work. For example, the NFS export might not be there at all or it might be running on a different network address or port.
+
+This kind of coupling is against the basic philosophy of Kubernetes: *portability* and *separation of concerns*. Ideally, a developer deploying her applications on Kubernetes should never have to know what kind of storage technology is used underneath, the same way she doesn’t know what type of physical servers are being used to run her pods. When a developer needs a certain amount of persistent storage, she should request it from Kubernetes, the same way she requests CPU and memory.
+
+In the **static provisioning** case, cluster administrators have to provision the underlying storage and then register it in Kubernetes by creating a `PersistentVolume` resource. When creating such a resource, the administrator has to specify its size and the access modes it supports.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: <volume-name>
+spec:
+  capacity:
+    storage: 1Gi
+  # read from and/or written to by a single or multiple nodes at the same time.
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+  # what to do with the volume when it is released.
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+      # directory location on host.
+      path: /data
+      # optional type of the volume.
+      # it could be Socket, DirectoryOrCreate, File and more.
+      type: Directory
+```
+
+When a user needs to use persistent storage in one of her pods, she first creates a `PersistentVolumeClaim`, specifying the minimum size and the access modes she requires. Claiming a volume is a completely separate process from creating a pod, because you want the same claim to stay available even if the pod is rescheduled. As soon as a user creates the claim, Kubernetes finds the appropriate PersistentVolume and binds it to the claim. The volume’s capacity must be large enough to accommodate what the claim requests, and the volume’s access modes must be compatible with the access modes requested.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: <claim-name>
+spec:
+  resources:
+    requests:
+      storage: 100M
+  accessModes:
+    - ReadWriteOnce
+  # relevant to dynamic provisioning
+  storageClassName: ""
+```
+
+Once we deploy the claim we will notice that the volume is bounded to the claim. The volume is now yours to use. Nobody else can claim the same volume until you release it.
+```bash
+$ kubectl get pv
+NAME       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM            
+<pv-name>  1Gi        RWO,ROX        Retain           Bound    <namespace>/<claim-name>
+```
+
+To use the volume inside a pod, you need to reference the PersistentVolumeClaim by name inside the pod’s `spec.volumes` block. A claim is in *active use* when a pod object exists that is using the claim. If a user deletes a claim in active use, the claim is not removed immediately. The removal is postponed until the claim is no longer actively used by any pods. Internally, this behaviour is achieved by using **finalizers**.
+```yaml
+...
+spec:
+  ...
+  volumes:
+    - name: <volume-name>
+      persistentVolumeClaim:
+        claimName: <claim-name>
+...
+```
+
+What happens with a persistent volume, once the claim that acquired it is deleted ? The **reclaim policy** for a persistent volume describes what to do with the volume after it has been released of its claim. There are three reclaim policies available:
+  - `Retain`, which retains the volume and its contents after it’s released from its claim. The volume is considered "released", but it is not yet available for another claim because the previous claim's data remains on the volume.
+  - `Recycle`, which deletes the volume’s contents and makes the volume available to be claimed again. This option is deprecated.
+  - `Delete`, which deletes the underlying storage.
+
 
 ### Labels and annotations
 Labels are key-value pairs that are attached to Kubernetes objects, such as pods or replica sets.
